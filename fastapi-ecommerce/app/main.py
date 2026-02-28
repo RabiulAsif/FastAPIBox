@@ -1,6 +1,10 @@
-from fastapi import FastAPI, HTTPException, Query
+from datetime import datetime
+from uuid import uuid4
+from uuid import UUID
 from fastapi import FastAPI, HTTPException, Query, Path
-from service.products import get_all_products
+from service.products import get_all_products, add_product, remove_product, update_product
+from schema.product import Product
+
 app = FastAPI()
 
 @app.get("/")
@@ -56,4 +60,46 @@ def get_product_id(
     for product in products:
         if product["id"]== product_id:
             return product
-        raise HTTPException(status_code=404, detail="Page not found!")    
+        raise HTTPException(status_code=404, detail="Page not found!")
+    
+@app.post("/products", status_code=201)
+def create_product(product: Product):
+    product_dict = product.model_dump(mode="json")
+    product_dict["id"] = str(uuid4())
+    product_dict["created_at"] = datetime.utcnow().isoformat() + "Z"
+
+    try:
+        add_product(product_dict)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return product.model_dump(mode="json")
+
+@app.delete("/products/{product_id}")
+def delete_product(
+    product_id: UUID = Path(
+        ...,
+        description="Product UUID",
+        example="6c7b7c69-f07f-4474-992e-58d3c48ac437"
+    )
+):
+    try:
+        res = remove_product(str(product_id))
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+@app.put("/products/{product_id}")
+def update_product_endpoint(
+    product_id: UUID = Path(
+        ...,
+        description="Product UUID",
+        example="6c7b7c69-f07f-4474-992e-58d3c48ac437"
+    ),
+    product: Product = ...
+):
+    try:
+        updated = update_product(str(product_id), product.model_dump(mode="json"))
+        return updated
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
